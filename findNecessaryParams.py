@@ -8,6 +8,11 @@ import re
 import subprocess
 import sys
 import os
+from difflib import SequenceMatcher
+
+# Used to determine the similarity of two strings (e.g. the output with and without a given parameter/header)
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 def getOutput(newHeaders, fullHeaders, newParams, fullParams, newCurl, binaryData): 
     
@@ -58,6 +63,11 @@ def getOutput(newHeaders, fullHeaders, newParams, fullParams, newCurl, binaryDat
 
     return returnString
 
+# Let the user decide if they want to use a thresholded value for comparison of output (slower), or an exact match (faster)
+# user might want to choose a comparison threshold because in some cases with exact match, all of the headers and parameters
+# will be deemed necessary due to some slight (negligible) difference in the output
+
+threshold = float(raw_input("Please enter a threshold (0.5 - 1.0) for output comparison (1.0 for exact matching):"))
 
 # We can't just have the user directly input the curl because it is often too long and will get truncated. Instead they have to create
 # a text file containing (only) the curl and place it in the same directory as this script
@@ -120,8 +130,6 @@ fullParams = firstParam + restofParams
 fullOutput = subprocess.check_output(fullCurlSeparated)
 newCurlSeparated = fullCurlSeparated
 
-raise ValueError(type(fullOutput))
-
 #####################################################################
 # First, try removing headers one by one to see if they are necessary. 
 #####################################################################
@@ -146,8 +154,13 @@ for header in fullHeaders :
     # test the new curl without that header, compare it to the output of the full curl 
     newOutput = subprocess.check_output(newCurlSeparated)
         
-    # if the output with that header removed is not the same, we shouldn't have removed it - put it back in. 
-    if newOutput != fullOutput : 
+    # if the output with that header removed is not the same (under a certain threshold), we shouldn't have removed it - put it back in. 
+    if threshold == 1.0: 
+        condition = newOutput != fullOutput
+    else: 
+        condition = similar(newOutput, fullOutput) < threshold
+    
+    if condition == True: 
         
         newCurlSeparated.insert(removedHeaderIndex_2 - 1, removedHeaderLabel)
         newCurlSeparated.insert(removedHeaderIndex_2, removedHeader)
@@ -178,9 +191,14 @@ for param in fullParams :
     # test the new curl without that parameter, compare it to the output of the full curl 
     newOutput = subprocess.check_output(newCurlSeparated)
         
-    # if the output with that parameter removed is not the same, we shouldn't have removed it - put it back in.
+    # if the output with that parameter removed is not the same (under a certain threshold), we shouldn't have removed it - put it back in.
     # Also put the old data back in to newCurlSeparated 
-    if newOutput != fullOutput : 
+    if threshold == 1.0: 
+        condition = newOutput != fullOutput
+    else: 
+        condition = similar(newOutput, fullOutput) < threshold
+    
+    if condition == True: 
         newParams.insert(removedParamIndex, param)
         newCurlSeparated[newCurlSeparated.index('--data') + 1] = oldData
 
